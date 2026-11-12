@@ -1,0 +1,23 @@
+{
+  "command": "node bench/bench.mjs",
+  "scale": "1e-6..1e6 invariant, tol = 1e-4 * min(diag)",
+  "target": "0.05 * min(diag)",
+  "repair_latency_ms_per_pair": {
+    "cold_ms": 461.19220449999995,
+    "min": 434.1801571666667,
+    "median": 437.43807499999997,
+    "p95": 447.50755449999997,
+    "stddev": 3.9995557031062035,
+    "rsd": 0.00914313575265757,
+    "samples": 7
+  },
+  "total_all_6_pairs_ms_warm_batch": {
+    "min": 2605.080943,
+    "median": 2624.6284499999997,
+    "p95": 2685.045327,
+    "stddev": 23.99733421863727,
+    "rsd": 0.00914313575265759,
+    "samples": 7
+  },
+  "note": "warm: 7 batches of the full 6-pair repair set; per-pair = batch/6. RSD>10% expected from heterogeneous pair topology (some take 1 direction, others up to 7)."
+}
