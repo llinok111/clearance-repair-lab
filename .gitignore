@@ -12,4 +12,5 @@ __pycache__/
 *.glb
 /state/
 proven_core.mjs
-tmp/.model-patch.yml
+tmp/
+.model-patch.yml
