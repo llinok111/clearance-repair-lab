@@ -1,112 +1,108 @@
-// main.js — render + interaction only. All numbers come from src/core.mjs.
-// Read the corpus (fetched at runtime), pick a pair, run repairSeparation in the
-// browser with the same core used in node, and display the resulting dual cert.
+// Rendering + interaction only. Every geometric number comes from src/core.mjs.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { makeMesh, repairSeparation, translateMesh } from './src/core.mjs';
+import { makeMesh, repairClearance } from './src/core.mjs';
 
-const app = document.getElementById('three');
-const statusEl = document.getElementById('status');
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(app.clientWidth, app.clientHeight);
-app.appendChild(renderer.domElement);
-
+const canvas = document.getElementById('canvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0a1018);
-const camera = new THREE.PerspectiveCamera(55, app.clientWidth / app.clientHeight, 0.01, 100);
-camera.position.set(2.2, 1.6, 2.4);
-const controls = new OrbitControls(camera, renderer.domElement);
+scene.background = new THREE.Color(0x0d1117);
+const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 1000);
+camera.position.set(3.2, 2.4, 4.2);
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+scene.add(new THREE.HemisphereLight(0xa8c8ff, 0x0a0a12, 1.1));
+const dir = new THREE.DirectionalLight(0xffffff, 1.6); dir.position.set(4, 6, 5); scene.add(dir);
+const grid = new THREE.GridHelper(10, 20, 0x30363d, 0x21262d); grid.position.y = -1.6; scene.add(grid);
 
-scene.add(new THREE.HemisphereLight(0xfff, 0x334, 1));
-const key = new THREE.DirectionalLight(0xfff, 1.2);
-key.position.set(2, 3, 2);
-scene.add(key);
-const key2 = new THREE.DirectionalLight(0x88c, 0.6);
-key2.position.set(-2, -1, -2);
-scene.add(key2);
+const corpus = await (await fetch('./data/corpus.json')).json();
+const reference = await (await fetch('./data/reference.json')).json();
+const state = { index: 0, result: null, group: null };
 
-const group = new THREE.Group();
-scene.add(group);
+const mat = (color) => new THREE.MeshStandardMaterial({ color, roughness: 0.45, metalness: 0.05, flatShading: false, side: THREE.DoubleSide });
 
-const WHITE = new THREE.MeshStandardMaterial({ color: 0x79b8ff, transparent: true, opacity: 0.85, side: THREE.DoubleSide, flatShading: true });
-const RED = new THREE.MeshStandardMaterial({ color: 0xff6b6b, transparent: true, opacity: 0.9, side: THREE.DoubleSide, flatShading: true });
-
-function buildMesh(mesh) {
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(mesh.positions), 3));
-  geo.setIndex(new THREE.BufferAttribute(mesh.indices, 1));
-  geo.computeVertexNormals();
-  return geo;
+function toGeometry(mesh) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(Float32Array.from(mesh.positions), 3));
+  g.setIndex(new THREE.BufferAttribute(Uint32Array.from(mesh.indices), 1));
+  g.computeVertexNormals();
+  g.computeBoundingSphere();
+  return g;
 }
 
-async function loadCorpus() {
-  const res = await fetch('./data/corpus.json');
-  return await res.json();
+function build(offset) {
+  if (state.group) { scene.remove(state.group); state.group.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); }); }
+  const c = corpus.cases[state.index];
+  const A = makeMesh(c.meshA.positions, c.meshA.indices, 'A');
+  const B0 = makeMesh(c.meshB.positions, c.meshB.indices, 'B');
+  const B = makeMesh(B0.positions.map((v, i) => v + offset[i % 3]), B0.indices, 'B');
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(toGeometry(A), mat(0x58a6ff)));
+  g.add(new THREE.Mesh(toGeometry(B), mat(0xf0883e)));
+  scene.add(g);
+  state.group = g;
+  return { A, B0 };
 }
 
-let corpus = null;
-try { corpus = await loadCorpus(); } catch (e) {
-  statusEl.textContent = '无法加载 data/corpus.json：' + e.message;
+function fmt(x, d = 5) { return Number.isFinite(x) ? x.toFixed(d) : 'n/a'; }
+
+function render() {
+  const c = corpus.cases[state.index];
+  const ref = reference.cases[state.index];
+  const { A, B0 } = build(state.result ? state.result.translation : [0, 0, 0]);
+  const target = state.result ? state.result.target : c.target;
+  const r = repairClearance(A, B0, target);
+  const rows = [
+    ['verdict', r.verdict],
+    ['before [lo, hi]', `[${fmt(r.before.lo)}, ${fmt(r.before.hi)}]`],
+    ['after  [lo, hi]', `[${fmt(r.after.lo)}, ${fmt(r.after.hi)}]`],
+    ['moved', fmt(r.moved)],
+    ['sound floor', fmt(r.lowerBound)],
+    ['moved / floor', fmt(r.gapRatio, 4)],
+    ['steps', String(r.steps.length)],
+    ['target', fmt(target)],
+  ];
+  document.getElementById('tbl').innerHTML = '<tr><th>live (browser core)</th><th></th></tr>'
+    + rows.map(([k, v]) => `<tr><td class="dim">${k}</td><td>${v}</td></tr>`).join('');
+  const match = r.verified === ref.verified && Math.abs(r.moved - ref.moved) < 1e-9
+    && Math.abs(r.after.lo - ref.after.lo) < 1e-9;
+  document.getElementById('hud').innerHTML =
+    `<b>${c.id}</b> — ${c.kind}<br>node reference: moved ${fmt(ref.moved)} · verified ${ref.verified}<br>`
+    + `browser: moved ${fmt(r.moved)} · verified ${r.verified}<br>`
+    + `<span class="${match ? 'ok' : 'bad'}">${match ? 'MATCHES node reference (1e-9)' : 'MISMATCH vs node reference'}</span>`
+    + `<br><span class="dim">${c.note}</span>`;
 }
 
-function runPair(k) {
-  const [GA, GB] = corpus.pairs[k];
-  const A = makeMesh(GA.P, GA.I, 'A');
-  const B0 = makeMesh(GB.P, GB.I, 'B');
-  const scale = parseFloat(document.getElementById('targetScale').value);
-  const target = scale * Math.min(A.diag, B0.diag);
-  const tol = Math.max(1e-12, 1e-4 * Math.min(A.diag, B0.diag));
-  const config = { tol, maxPairs: 4_000_000, iters: 34, target };
-  const r = repairSeparation(A, B0, config);
-
-  // replace scene content
-  while (group.children.length) group.remove(group.children[0]);
-  const ga = buildMesh(A);
-  const gaMesh = new THREE.Mesh(ga, WHITE);
-  group.add(gaMesh);
-
-  const Bshift = r.repairable && r.translation
-    ? translateMesh(B0, r.translation[0], r.translation[1], r.translation[2])
-    : B0;
-  const gb = buildMesh(Bshift);
-  const gbMesh = new THREE.Mesh(gb, RED);
-  group.add(gbMesh);
-
-  // recenter on combined
-  const box = new THREE.Box3().setFromObject(group);
-  const c = box.getCenter(new THREE.Vector3());
-  camera.position.copy(c).add(new THREE.Vector3(1, 0.7, 1));
-  camera.lookAt(c);
-  controls.target.copy(c);
-  controls.update();
-
-  const fmt = (x) => (x === null || x === undefined) ? '—' : x.toExponential(3);
-  const bInt = r.before ? r.before.interval : null;
-  const rInt = r.repaired ? r.repaired.interval : null;
-  statusEl.innerHTML =
-    `<b>pair P${k} · 目标间隙</b> target = ${(target).toExponential(3)}<br/>` +
-    `<b>修复前间隙</b> [lo, hi] = [${fmt(bInt && bInt[0])}, ${fmt(bInt && bInt[1])}] ` +
-    `(certified=${r.before ? r.before.certified : '—'})<br/>` +
-    `<b>修复平移</b> magnitude = <span class="num">${r.magnitude === null ? '—' : r.magnitude.toExponential(3)}</span> ` +
-    `(方向 ${r.direction ? r.direction.map((x) => x.toFixed(3)).join(', ') : '—'})<br/>` +
-    `<b>修复后间隙</b> [lo, hi] = [${fmt(rInt && rInt[0])}, ${fmt(rInt && rInt[1])}] ` +
-    `(certified=${r.repaired ? r.repaired.certified : '—'})<br/>` +
-    `<span class="${r.repairable && r.repaired && r.repaired.interval[0] > 0 ? 'ok' : 'no'}">` +
-    `→ 修复后 lo = ${fmt(rInt && rInt[0])} ${r.repairable && r.repaired && r.repaired.interval[0] > 0 ? '> 0 ✓' : 'NOT REPAIRED'}</span>`;
+function syncTarget() {
+  const c = corpus.cases[state.index];
+  const slider = document.getElementById('target');
+  const lo = c.target * 0.4, hi = c.target * 2.2;
+  slider.min = String(lo); slider.max = String(hi); slider.step = String(c.target / 200);
+  slider.value = String(c.target);
+  document.getElementById('tv').textContent = `= ${Number(slider.value).toFixed(3)}`;
 }
 
-document.getElementById('pair0').addEventListener('click', () => runPair(0));
-document.getElementById('pair3').addEventListener('click', () => runPair(3));
-document.getElementById('pair4').addEventListener('click', () => runPair(4));
-document.getElementById('targetScale').addEventListener('change', () => {
-  document.getElementById('targetVal').textContent = document.getElementById('targetScale').value;
-  if (corpus) runPair(0);
-});
-runPair(0);
+const sel = document.getElementById('case');
+sel.innerHTML = corpus.cases.map((c, i) => `<option value="${i}">${c.id} — ${c.kind}</option>`).join('');
+sel.onchange = () => { state.index = Number(sel.value); state.result = null; syncTarget(); render(); };
+document.getElementById('target').oninput = (e) => { document.getElementById('tv').textContent = `= ${Number(e.target.value).toFixed(3)}`; render(); };
+document.getElementById('repair').onclick = () => {
+  const c = corpus.cases[state.index];
+  const target = Number(document.getElementById('target').value);
+  const A = makeMesh(c.meshA.positions, c.meshA.indices, 'A');
+  const B = makeMesh(c.meshB.positions, c.meshB.indices, 'B');
+  const r = repairClearance(A, B, target);
+  state.result = r.verified ? { translation: r.translation, target } : { translation: r.translation, target };
+  render();
+};
+document.getElementById('reset').onclick = () => { state.result = null; syncTarget(); render(); };
 
-renderer.setAnimationLoop(() => renderer.render(scene, camera));
-window.addEventListener('resize', () => {
-  camera.aspect = app.clientWidth / app.clientHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(app.clientWidth, app.clientHeight);
-});
+function resize() {
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize);
+resize(); syncTarget(); render();
+renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });

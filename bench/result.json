@@ -1,23 +1,204 @@
 {
-  "command": "node bench/bench.mjs",
-  "scale": "1e-6..1e6 invariant, tol = 1e-4 * min(diag)",
-  "target": "0.05 * min(diag)",
-  "repair_latency_ms_per_pair": {
-    "cold_ms": 461.19220449999995,
-    "min": 434.1801571666667,
-    "median": 437.43807499999997,
-    "p95": 447.50755449999997,
-    "stddev": 3.9995557031062035,
-    "rsd": 0.00914313575265757,
-    "samples": 7
+  "runtime": {
+    "node": "v24.19.0",
+    "platform": "linux",
+    "arch": "x64",
+    "cpus": 4
   },
-  "total_all_6_pairs_ms_warm_batch": {
-    "min": 2605.080943,
-    "median": 2624.6284499999997,
-    "p95": 2685.045327,
-    "stddev": 23.99733421863727,
-    "rsd": 0.00914313575265759,
-    "samples": 7
+  "method": "cold start + 1 warmup + 7 timed repetitions per case; per-case and pooled statistics",
+  "repeats": 7,
+  "coldStartTorusMs": 406.4487359999998,
+  "pooled": {
+    "min": 0.30325999999990927,
+    "median": 0.9641529999998966,
+    "p95": 420.390569,
+    "max": 426.4721539999998,
+    "stddev": 155.1079328388063,
+    "rsd": 2.2091781308334175,
+    "samples": 42
   },
-  "note": "warm: 7 batches of the full 6-pair repair set; per-pair = batch/6. RSD>10% expected from heterogeneous pair topology (some take 1 direction, others up to 7)."
+  "cases": [
+    {
+      "id": "box-on-box",
+      "target": 0.05,
+      "tris": 144,
+      "ms": {
+        "min": 0.32699400000001333,
+        "median": 0.33743299999991905,
+        "p95": 0.36334400000009737,
+        "max": 0.36334400000009737,
+        "stddev": 0.010734477309257064,
+        "rsd": 0.03156386240216657,
+        "samples": 7
+      }
+    },
+    {
+      "id": "sphere-on-box",
+      "target": 0.05,
+      "tris": 2016,
+      "ms": {
+        "min": 0.9641529999998966,
+        "median": 0.9796419999997852,
+        "p95": 1.4068039999999655,
+        "max": 1.4068039999999655,
+        "stddev": 0.1505269023287591,
+        "rsd": 0.144872826357788,
+        "samples": 7
+      }
+    },
+    {
+      "id": "cylinder-on-plate",
+      "target": 0.04,
+      "tris": 768,
+      "ms": {
+        "min": 0.34443800000008196,
+        "median": 0.3646960000000945,
+        "p95": 0.3672910000000229,
+        "max": 0.3672910000000229,
+        "stddev": 0.009233504641189917,
+        "rsd": 0.025691841350714506,
+        "samples": 7
+      }
+    },
+    {
+      "id": "tetra-over-box",
+      "target": 0.1,
+      "tris": 48,
+      "ms": {
+        "min": 0.30325999999990927,
+        "median": 0.30982200000016746,
+        "p95": 0.4841100000001006,
+        "max": 0.4841100000001006,
+        "stddev": 0.06111780494812729,
+        "rsd": 0.1824528795602615,
+        "samples": 7
+      }
+    },
+    {
+      "id": "torus-over-sphere",
+      "target": 0.08,
+      "tris": 64512,
+      "ms": {
+        "min": 408.95561,
+        "median": 416.91005599999994,
+        "p95": 426.4721539999998,
+        "max": 426.4721539999998,
+        "stddev": 6.00985470296232,
+        "rsd": 0.014412260473864718,
+        "samples": 7
+      }
+    },
+    {
+      "id": "sphere-sphere-eps",
+      "target": 0.06,
+      "tris": 28224,
+      "ms": {
+        "min": 2.094357999999829,
+        "median": 2.1350649999999405,
+        "p95": 2.606901999999991,
+        "max": 2.606901999999991,
+        "stddev": 0.1689550348388374,
+        "rsd": 0.07698311745561634,
+        "samples": 7
+      }
+    }
+  ],
+  "baseline": [
+    {
+      "id": "box-on-box",
+      "verdict": "no-direction",
+      "moved": 0,
+      "verified": false,
+      "tests": 144,
+      "ms": {
+        "min": 0.33960899999965477,
+        "median": 0.34974800000009054,
+        "p95": 0.4903220000001056,
+        "max": 0.4903220000001056,
+        "stddev": 0.06878166516525637,
+        "rsd": 0.17491622339280022,
+        "samples": 3
+      }
+    },
+    {
+      "id": "sphere-on-box",
+      "verdict": "no-direction",
+      "moved": 0,
+      "verified": false,
+      "tests": 2016,
+      "ms": {
+        "min": 5.639081999999689,
+        "median": 5.688675999999759,
+        "p95": 5.957852999999886,
+        "max": 5.957852999999886,
+        "stddev": 0.14005188427714169,
+        "rsd": 0.024306670607792877,
+        "samples": 3
+      }
+    },
+    {
+      "id": "cylinder-on-plate",
+      "verdict": "no-direction",
+      "moved": 0,
+      "verified": false,
+      "tests": 768,
+      "ms": {
+        "min": 1.883871999999883,
+        "median": 1.9486440000000584,
+        "p95": 1.99030300000004,
+        "max": 1.99030300000004,
+        "stddev": 0.043790463226159426,
+        "rsd": 0.02256147575229089,
+        "samples": 3
+      }
+    },
+    {
+      "id": "tetra-over-box",
+      "verdict": "not-separated",
+      "moved": 0.07999999999999999,
+      "verified": false,
+      "tests": 96,
+      "ms": {
+        "min": 0.3029989999999998,
+        "median": 0.3102939999998853,
+        "p95": 0.46899200000007113,
+        "max": 0.46899200000007113,
+        "stddev": 0.0765883282941852,
+        "rsd": 0.21229619266881175,
+        "samples": 3
+      }
+    },
+    {
+      "id": "torus-over-sphere",
+      "verdict": "not-separated",
+      "moved": 0.012400787949967629,
+      "verified": false,
+      "tests": 129024,
+      "ms": {
+        "min": 351.4755849999997,
+        "median": 351.8367939999998,
+        "p95": 352.5039790000001,
+        "max": 352.5039790000001,
+        "stddev": 0.42598930413583974,
+        "rsd": 0.0012104073807194411,
+        "samples": 3
+      }
+    },
+    {
+      "id": "sphere-sphere-eps",
+      "verdict": "repaired",
+      "moved": 0.05990000000000001,
+      "verified": true,
+      "tests": 56448,
+      "ms": {
+        "min": 155.36462699999993,
+        "median": 155.71075800000017,
+        "p95": 156.23150799999985,
+        "max": 156.23150799999985,
+        "stddev": 0.3562879453197772,
+        "rsd": 0.002287284548912767,
+        "samples": 3
+      }
+    }
+  ]
 }

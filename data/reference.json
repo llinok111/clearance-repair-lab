@@ -1,0 +1,216 @@
+{
+  "generator": "tools/gen-reference.mjs (node core, no browser)",
+  "runtime": "v24.19.0",
+  "cases": [
+    {
+      "id": "box-on-box",
+      "target": 0.05,
+      "verdict": "repaired-certified",
+      "verified": true,
+      "before": {
+        "lo": 0,
+        "hi": 0,
+        "certified": true,
+        "pa": [
+          0.3333333333333333,
+          -0.3333333333333333,
+          -1
+        ],
+        "pb": [
+          0.3333333333333333,
+          -0.3333333333333333,
+          -1
+        ]
+      },
+      "after": {
+        "lo": 0.05005000000000003,
+        "hi": 0.05010000000000003,
+        "certified": true
+      },
+      "translation": [
+        0,
+        0.050100000000000006,
+        0
+      ],
+      "moved": 0.050100000000000006,
+      "lowerBound": 0.05,
+      "gapRatio": 1.002,
+      "steps": 1
+    },
+    {
+      "id": "sphere-on-box",
+      "target": 0.05,
+      "verdict": "repaired-certified",
+      "verified": true,
+      "before": {
+        "lo": 0,
+        "hi": 0,
+        "certified": true,
+        "pa": [
+          0.3333333333333333,
+          0.5,
+          0.3333333333333333
+        ],
+        "pb": [
+          0.3333333333333333,
+          0.5,
+          0.3333333333333333
+        ]
+      },
+      "after": {
+        "lo": 0.05005000000000003,
+        "hi": 0.05010000000000003,
+        "certified": true
+      },
+      "translation": [
+        0,
+        0.050100000000000006,
+        0
+      ],
+      "moved": 0.050100000000000006,
+      "lowerBound": 0.05,
+      "gapRatio": 1.002,
+      "steps": 1
+    },
+    {
+      "id": "cylinder-on-plate",
+      "target": 0.04,
+      "verdict": "repaired-certified",
+      "verified": true,
+      "before": {
+        "lo": 0,
+        "hi": 0,
+        "certified": true,
+        "pa": [
+          -0.6666666666666666,
+          0,
+          -0.6666666666666666
+        ],
+        "pb": [
+          -0.6666666666666666,
+          0,
+          -0.6666666666666666
+        ]
+      },
+      "after": {
+        "lo": 0.04004,
+        "hi": 0.04008,
+        "certified": true
+      },
+      "translation": [
+        0,
+        0.04008,
+        0
+      ],
+      "moved": 0.04008,
+      "lowerBound": 0.04,
+      "gapRatio": 1.002,
+      "steps": 1
+    },
+    {
+      "id": "tetra-over-box",
+      "target": 0.1,
+      "verdict": "repaired-certified",
+      "verified": true,
+      "before": {
+        "lo": 0.019913397459621573,
+        "hi": 0.020000000000000018,
+        "certified": true,
+        "pa": [
+          0.25,
+          0.5,
+          -0.25
+        ],
+        "pb": [
+          0.25,
+          0.52,
+          -0.25
+        ]
+      },
+      "after": {
+        "lo": 0.10017320508075685,
+        "hi": 0.10025980762113529,
+        "certified": true
+      },
+      "translation": [
+        0,
+        0.08025980762113531,
+        0
+      ],
+      "moved": 0.08025980762113531,
+      "lowerBound": 0.07999999999999999,
+      "gapRatio": 1.0032475952641915,
+      "steps": 1
+    },
+    {
+      "id": "torus-over-sphere",
+      "target": 0.08,
+      "verdict": "repaired-certified",
+      "verified": true,
+      "before": {
+        "lo": 0.06751921205003238,
+        "hi": 0.06759921205003237,
+        "certified": true,
+        "pa": [
+          -0.07847671398352149,
+          0.4854101966249684,
+          -0.3438289492972604
+        ],
+        "pb": [
+          -0.08507705500983062,
+          0.5439339828220179,
+          -0.37701110440032304
+        ]
+      },
+      "after": {
+        "lo": 0.08009374671815239,
+        "hi": 0.08017374671815239,
+        "certified": true
+      },
+      "translation": [
+        -0.000014230845924521477,
+        0.014256627668125405,
+        0.00007154329372270497
+      ],
+      "moved": 0.0142568142804559,
+      "lowerBound": 0.012400787949967629,
+      "gapRatio": 1.1496700320960747,
+      "steps": 3
+    },
+    {
+      "id": "sphere-sphere-eps",
+      "target": 0.06,
+      "verdict": "repaired-certified",
+      "verified": true,
+      "before": {
+        "lo": 0.000039999999999988985,
+        "hi": 0.00009999999999998899,
+        "certified": true,
+        "pa": [
+          0,
+          0.5,
+          0
+        ],
+        "pb": [
+          0,
+          0.5001,
+          0
+        ]
+      },
+      "after": {
+        "lo": 0.060120000000000014,
+        "hi": 0.06018000000000001,
+        "certified": true
+      },
+      "translation": [
+        0,
+        0.06008000000000001,
+        0
+      ],
+      "moved": 0.06008000000000001,
+      "lowerBound": 0.05990000000000001,
+      "gapRatio": 1.0030050083472455,
+      "steps": 1
+    }
+  ]
+}

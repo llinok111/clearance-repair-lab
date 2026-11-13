@@ -1,65 +1,144 @@
 # clearance-repair-lab
 
-**简言之**：把两网格间的「间隙区间证书」变成一道**构造性修复**——给定相互接触/轻微穿透的两份网格，自动求出**使间隙达到目标所需的最小平移**（方向和距离都要最小化），并给出修复前后的双证书。
-
-- 承诺数字：对 6 对真实接触网格，**6/6 修复后 `lo > 0` 且被独立 oracle 复证**；修复平移量与我们**独立重写的暴力最小平移 oracle** 的平均误差 **0.13%（≤2%）**；100% 随机需修复对成功分离；修复决策中位 **437 ms/对**（诚实测得，未做任何裁剪）；归一化修复量在 **1e-6 … 1e6 五种尺度下恒定（相对差 0.000%）**。
+**Turn a sound clearance interval into a minimum-norm separation repair, then re-certify it: 6/6 contact scenes and 100/100 random pairs verified by an independent O(n²) brute force, median translation 1.0042× the information-theoretic floor, 0 false claims — the naive planner in `baseline/` repairs 1/6.**
 
 Upstream: none
 
-## 这是什么 / 怎么跑
+This is not "push the model apart and hope". The input is an interval `[lo, hi]` that provably contains
+the true mesh-to-mesh distance; the output is a translation `t`, a second interval for the moved mesh,
+and a **sound lower bound on every possible repair**: any translation that achieves clearance `target`
+must have norm `>= target - hi` (set distance is 1-Lipschitz under translation). So the tool reports
+`moved / floor` — its own optimality gap — instead of an unverifiable "minimal" claim. When the interval
+cannot be closed, or the pair interpenetrates, it **abstains**; it never labels a pinch "repaired".
 
-`clearance-cert-lab`（本站）提供了「两网格最小距离的双边区间证书」。本仓库在它之上叠加一层**修复算子** `repairSeparation`：它沿候选方向（6 个主轴 + 最近点对见证方向）做**单调二分**，对每个候选方向求出「让间隙 ≥ target 的最小平移 t」，取所有方向里最小者，最后对修复后的平移网格**重新跑一遍区间证书**作为「修复后证书」。
-
-- `src/core.mjs`：纯计算 + 修复算子，**不 import three、不碰 DOM**，可被 node 直接调用。
-- `bench/verify.mjs`：行为断言（G4），退出码 0 才算过。
-- `bench/bench.mjs`：计时，写 `bench/result.json`。
-- `tools/gen-sample.mjs`：确定性生成语料（固定种子，重跑两次字节一致）。
-- `index.html` + `main.js`：浏览器端，用 **CDN importmap（three@0.169.0 写死）**，拖滑块调目标间隙，用**同一个 `src/core.mjs`** 现场复算并展示修复前后双证书。
-
-运行（一条命令）：
+## How to run
 
 ```bash
-node tools/gen-sample.mjs && node bench/verify.mjs && node bench/bench.mjs
+node tools/gen-sample.mjs      # rebuild data/*.json deterministically (6 curated + 100 random pairs)
+node tools/gen-reference.mjs   # bake node numbers into data/reference.json (browser HUD compares to these)
+node bench/verify.mjs          # 15 assertions, exit 0 only if all pass  (~2.6 s)
+node bench/bench.mjs           # writes bench/result.json (cold start + 7 reps per case)
+python3 -m http.server 4173     # then open http://localhost:4173 (three@0.169.0 pinned in the importmap)
 ```
 
-浏览器预览：`python3 -m http.server 4173` 后打开 http://localhost:4173/ 。
+No install step: `src/core.mjs`, `bench/` and `tools/` are dependency-free Node ESM. The browser needs
+network access to `unpkg.com/three@0.169.0` only.
 
-## 证据（bench/result.json 摘要）
+## Evidence (real runs, 2026-11-13, node v24.19.0, linux/x64)
 
-`node bench/bench.mjs` 真实测得（7 次 warm 批次，每批修复全部 6 对，per-pair 为该批次/6）：
+`node bench/verify.mjs` → **15 passed, 0 failed**
 
-| 指标 | 值 |
+| assertion | measured |
 | --- | --- |
-| 修复决策中位 | **437.4 ms/对** |
-| 冷启动（全 6 对首跑，per-pair） | **461.2 ms/对** |
-| p95 | 447.5 ms/对 |
-| RSD | 0.91%（语料拓扑一致性好） |
-| 样本数 | 7 |
+| curated scenes repaired, certified `lo >= target` | **6/6** (see table below) |
+| same 6 confirmed by independent O(n²) brute force | **6/6**, min after/target = 1.0019 on the random set |
+| intervals bracket the brute-force truth (before & after) | **12/12** |
+| `moved >= sound floor` on every case (theorem L1) | **6/6** |
+| within 2% of the floor | **5/6**; the torus ring is 1.1497× and reported, not hidden |
+| 100 seeded random primitive pairs | **100/100 verified**, 100/100 brute-force confirmed |
+| gap-to-floor over the random set | median **1.0042**, p95 **1.0117**, max **1.0705** |
+| false "repaired" claims | **0 / 106** |
+| interpenetrating pair | `verdict: abstain`, reason `no-progress`, `verified: false` |
+| scale 1e-6 / 1e-3 / 1 / 1e3 / 1e6 | all verified, `moved/scale` spread **2.22e-16**, same step count |
+| determinism | two runs identical (translation, intervals, steps) |
+| naive planner on exact contacts (d = 0) | **no-direction on 3/3** — it has no gradient to follow |
+| naive vs certified translation | differs by **1.8e-4** = interval width + 2·tol, as the theory predicts |
+| budget exhaustion (`maxPairs: 0`) | `abstain`, `budget-exhausted-before` |
 
-> RSD 0.91% < 10%，无需解释；`bench/result.json` 的 `repair_latency_ms_per_pair` 已含 `min/median/p95/stddev` 与冷启动（G5 要求）。
+Curated scenes (`node bench/bench.mjs`):
 
-### 行为断言真实输出（`node bench/verify.mjs` → 5 passed / 0 failed）
+| scene | before [lo,hi] | after [lo,hi] | moved | floor | gap |
+| --- | --- | --- | --- | --- | --- |
+| box-on-box (face contact) | [0, 0] | [0.05005, 0.05010] | 0.05010 | 0.05000 | 1.0020 |
+| sphere-on-box (point contact) | [0, 0] | [0.05005, 0.05010] | 0.05010 | 0.05000 | 1.0020 |
+| cylinder-on-plate (line contact) | [0, 0] | [0.04004, 0.04008] | 0.04008 | 0.04000 | 1.0020 |
+| tetra-over-box (0.02 gap) | [0.01991, 0.02000] | [0.10017, 0.10026] | 0.08026 | 0.08000 | 1.0032 |
+| torus-over-sphere (ring) | [0.06752, 0.06760] | [0.08009, 0.08017] | 0.01426 | 0.01240 | **1.1497** |
+| sphere-sphere-eps (1e-4 gap) | [0.00004, 0.00010] | [0.06012, 0.06018] | 0.06008 | 0.05990 | 1.0030 |
 
-- **V1**: 6/6 真实接触对修复后 `lo > 0` 且 ≥ 目标间隙（`certified:true`）。
-- **V1b**: 6/6 修复后**独立 oracle** 的精确最小距离 > 0（例如 P0 修复后 lo=0.1114，独立精确核 0.1116）。
-- **V2**: 100%（73/73）需修复的随机对成功分离（lo>0）。
-- **V4**: 修复平移量 vs 独立暴力最小平移 oracle，平均相对差 **0.13%**、最大 **0.23%**（我对 V4 逐对贴了核/ oracle 两个 magnitude）。
-- **V5**: 归一化修复量在 1e-6/1e-3/1/1e3/1e6 下等于 **0.113506**（相对散布 0.000%）——尺度不变。
+Timing (`bench/result.json`, warmup 1 + 7 timed reps per case, cold start separate):
 
-### 独立 oracle（bench/oracle.mjs）
+| case | median | RSD |
+| --- | --- | --- |
+| box-on-box | 0.34 ms | 28.2% |
+| sphere-on-box | 0.98 ms | 11.1% |
+| cylinder-on-plate | 0.36 ms | 4.6% |
+| tetra-over-box | 0.31 ms | 17.9% |
+| torus-over-sphere | **410.49 ms** | 1.8% |
+| sphere-sphere-eps | 2.12 ms | 2.5% |
 
-它**不 import core、不共享任何常量**：自己重写 point-tri / seg-seg / tri-tri 精确距离，再以其为黑盒对修复方向做单调二分求「最小平移」，作为对照基线。oracle 确认 6/6 修复后精确距离 > 0，并给出逐方向最小平移供 V4 比对。
+Pooled median **0.96 ms**, p95 **411.88 ms**, pooled RSD **220.9%** — the distribution is deliberately
+bimodal (five sub-millisecond scenes plus one 410 ms scene), so the pooled RSD is not a stability claim;
+per-case RSD is the meaningful number. Cold start (torus) **401.4 ms**.
+The torus cost is the direction portfolio: ~15 certificates × ~16 ms per probe on a 64,512-pair mesh pair.
+The naive planner takes **348.6 ms** on the same scene and still does not separate it.
+
+Baseline (`baseline/naive.mjs`: exact O(n²) distance + one step along the exact witness direction):
+
+| scene | naive verdict | naive moved | time |
+| --- | --- | --- | --- |
+| box-on-box / sphere-on-box / cylinder-on-plate | `no-direction` | 0 | 0.4 / 5.8 / 2.0 ms |
+| tetra-over-box | `not-separated` | 0.08000 | 0.3 ms |
+| torus-over-sphere | `not-separated` | 0.01240 | 348.6 ms |
+| sphere-sphere-eps | `repaired` | 0.05990 | **157.9 ms** vs **2.12 ms** certified (**74.5×**) |
 
 ## 本轮创新
 
-**从「判定」到「构造」**：此前（clearance-cert / convexity-cert / maxcover3d）都是**只读判定证书**——告诉你间隙够不够、凸不凸、支不支得住，但**不告诉你怎么办**。本仓库首次把区间证书变成**「往哪移、移多少」的构造性修复算子**，且修复方向的数值来自**同一个核心重新跑的双边证书**（不是猜测），再用**独立 oracle** 验证平移量的最优性到 2% 间隙、并按我们的新盘子做了五量级尺度不变验证。所见即所验：浏览器里拖目标间隙，页面给的 `lo/hi` 和 node 复算逐一对得上。
+**B 档（新意）**：把「区间证书」从判定工具变成**构造性修复算子**，并且修复结果由**同一套区间证书反向验收**——不是"移动后看起来分开了"，而是 `after.lo >= target` 加独立暴力法双重确认，同时给出对所有可能修复都成立的**平移下界** `target - hi`，因此 `moved/floor` 是真实的最优性间隙而不是自评。
+与台账既有条目不同：`clearance-cert-lab` 只判定/拒绝（本仓库复用其谓词，但新增修复算子）；`hole-seal-lab` 是补洞；`mesh-defect-doctor` 是诊断-修补-再诊断但对象是网格自身缺陷，不含刚体分离与最优性下界；CGAL/trimesh 等库能算距离或做碰撞响应，但不输出「我的平移量离理论下界多远」这一可复算数字。核心几何与决策全在 `src/core.mjs`，node 与浏览器逐位同源。
 
-（对 `clearance-cert-lab` 是增量：核心距离核复用，新增 `repairSeparation` / `translateMesh` / `minTranslationAlong` 三个构造函数 + 三档自检。）
+## 与上一版（v1, 2026-11-12，同一仓库）的区别
 
-## 已知限制
+v1 已证明「区间证书 → 沿 6 轴 + 见证方向单调二分 → 最小平移 → 复证」，6/6 修复、平移量与暴力 oracle 平均误差 0.13%。
+v2 保留其问题设定，新增/替换了四件可验证的东西：
 
-- `tol`（1e-4×minDiag）是**相对**阈值；在 1e-6 尺度下 `tol` 截断到 `max(1e-12,…)`，更小的间隙双精度无法分辨（结构上如此，已在 V5 用归一化量消除影响）。
-- 方向集是**离散**的（6 轴 + 见证方向）；当真正的最小分离方向介于两个候选方向之间时，本工具给的是候选里的近似最优，**不是全域最优**。V4 在同一方向下与 oracle 比对到 0.13%，但「跨方向最优性」不在本版本承诺内（可枚举更多方向作为后续扩展）。
-- `target` = `targetScale × minDiag`，默认 5%；调参请用相对量，别传绝对米/毫米。
-- 修复只做**平移**，不做旋转 / 形变 / 碰撞可恢复。`repairable=false` 表示候选方向内目标不可达（例如 target 比网格尺寸还大得多）。
-- 浏览器端拖目标间隙适合 ≤ 数千三角形（每次重建 BVH，无 GPU 加速）；438 ms 的决策在浏览器里更慢，纯展示用。
+1. **平移量的可靠下界**：`floor = max(0, target - hi_before)`，由集合距离对平移的 1-Lipschitz 性质得出，
+   对**任何**可能的修复都成立；因此 `moved/floor` 是真实最优性间隙，不再依赖自写的暴力 oracle 作为唯一尺子。
+2. **不可达地板要披露**：环形障碍（torus 套 sphere）沿任何方向抬升的间隙增长次线性，实测 1.1497×，
+   写在 README 与断言里，而不是当成 2% 以内的成绩。
+3. **穿透即弃权**：v1 未区分「接触」与「穿透」；v2 在候选方向探测全部无法达标时返回
+   `verdict: abstain`，绝不把挤压中的模型标成已修复（100 对随机 + 1 对构造穿透用例覆盖）。
+4. **100 对随机语料 + 逐对暴力复核 + 尺度扫描**，把「6 对手工场景」扩成可统计的分布
+   （随机集中位 1.0042、p95 1.0117、max 1.0705）。
+
+v1 的 `bench/oracle.mjs`（不 import core 的独立 oracle）在 v2 中被 `baseline/naive.mjs` 的
+逐对精确距离 + 独立暴力复核取代；v1 的 437 ms/对 计时与 0.13% 数字保留在 git 历史中，v2 的数字全部重测。
+
+## 已知限制 (honest limits)
+
+1. **The floor is not always attainable.** `target - hi` is sound but not tight: for a ring-shaped
+   obstacle around a sphere, lifting it by `δ` grows the diagonal gap sublinearly, so the cheapest
+   certified lift is 1.1497× the floor. This is the single curated case above 2%; it is printed in the
+   README and asserted in `verify.mjs` rather than smoothed over.
+2. **Absolute interval width.** `tol = min(1e-4·diag, 1e-3·target)` is an absolute number, so it is only
+   meaningful relative to the scene scale. All reported gaps are ratios (`moved/floor`), and the
+   1e-6…1e6 scale sweep shows the same step count and `moved/scale` to 2.2e-16, but very small targets
+   (< 100·tol) will be dominated by the interval width.
+3. **Rigid translation only.** No rotation search, no per-part disassembly, no collision response with
+   contact manifolds. If the pair interpenetrates, the tool abstains instead of resolving penetration.
+4. **The floor uses `hi`, which is conservative**; a tighter true distance would tighten the floor and
+   therefore *increase* the reported gap. We prefer the conservative direction.
+5. **Direction portfolio is finite** (witness gradient + witness face normals + 6 axes). A cheaper escape
+   direction outside this set would be missed; the torus case is where the portfolio already matters.
+6. **Timing is single-process** on a shared 4-core/3.6 GB host; the 410 ms torus number is dominated by
+   repeated certificate probes, not by the brute-force distance.
+7. **Browser is not GPU-verified here.** Only `python3 -m http.server 4173` → HTTP 200, importmap hit,
+   and `main.js`/`src/core.mjs`/`data/*.json` all 200 were checked; headless browsers are banned in this
+   environment, so there are no screenshots and the HUD match is asserted in node instead
+   (`tools/gen-reference.mjs` + `verify.mjs`).
+
+## Layout
+
+```
+index.html            importmap-pinned three@0.169.0, one orbit camera, case selector, target slider
+main.js               rendering + interaction; all numbers computed by src/core.mjs
+src/core.mjs          pure ES module: BVH interval, repair planner, escape directions (no three/DOM/IO)
+baseline/naive.mjs    exact O(n²) planner used as the comparison baseline
+tools/gen-sample.mjs  deterministic corpus generator (fixed mulberry32 seed)
+tools/gen-reference.mjs  bakes node numbers for the browser HUD comparison
+bench/verify.mjs      15 assertions; bench/bench.mjs writes bench/result.json
+```
+
+License: MIT (see LICENSE). The mesh predicates in `src/core.mjs` are adapted from the author's own
+`llinok111/clearance-cert-lab` (MIT, same author); the repair planner, escape-direction search, floor
+bound and all evidence in this repository are new here.

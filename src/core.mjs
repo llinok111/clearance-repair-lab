@@ -1,6 +1,5 @@
-// clearance-repair core: sound two-sided interval for the distance between two triangle
-// meshes, PLUS a certificate-driven constructive separator. Pure ES module. No three.js,
-// no DOM, no I/O, no environment access at import time.
+// clearance-cert core: sound two-sided interval for the distance between two triangle meshes.
+// Pure ES module. No three.js, no DOM, no I/O, no environment access at import time.
 //
 // Every number this module reports is an interval [lo, hi]:
 //   * hi comes from exact triangle-triangle distance of pairs that were actually visited
@@ -443,133 +442,162 @@ export function certifyClearance(A, B, target, opts = {}) {
   return { pass: false, verdict: 'undecided', interval: [r.lo, r.hi], target, result: r };
 }
 
-/* =====================================================================
- * Certificate-driven constructive separation (NEW in this round).
- * Given two meshes A, B and a target clearance, find the minimal
- * translation that separates them so that dist(A, B+t) >= target.
- * The direction is seeded from the exact closest-triangle witness pair,
- * with extra candidate directions supplied by the caller; for each
- * candidate unit direction we binary-search the minimal translation that
- * reaches the target, and keep the one with the smallest magnitude.
- * The result is re-certified: the returned [lo,hi] interval is a sound
- * two-sided interval for the repaired contact, exactly as in closestPair.
- * ===================================================================== */
+/* --------------------------------------------------------------------- repair */
+// Certificate-driven separation repair.
+//
+// Math used (all of it is checkable by hand):
+//   L1  dist(A, B + t) >= dist(A, B) - |t|          (1-Lipschitz of set distance in t)
+//   =>  any translation t that realises clearance `target` must satisfy
+//       |t| >= target - dist(A,B) >= target - hi_before, because hi_before >= dist(A,B).
+//   So `lowerBound = max(0, target - hi_before)` is a SOUND lower bound on the norm of
+//   *every* possible repair, not just ours.  We report gap = |t_ours| / lowerBound.
+//
+//   L2  if pa is a closest point on A, pb a closest point on B, d = |pa-pb| > 0 and
+//       u = (pb-pa)/d, then |pa - (pb + delta*u)| = d + delta exactly.  Moving B along
+//       u by delta opens *that* witness pair by delta; other pairs can still pinch,
+//       which is why every result is re-certified rather than assumed.
 
-/** Translate a mesh's positions by (dx,dy,dz); returns a new mesh object. */
-export function translateMesh(mesh, dx, dy, dz) {
-  const pos = new Float64Array(mesh.positions.length);
-  for (let i = 0; i < pos.length; i += 3) {
-    pos[i] = mesh.positions[i] + dx;
-    pos[i + 1] = mesh.positions[i + 1] + dy;
-    pos[i + 2] = mesh.positions[i + 2] + dz;
+export function translateMesh(mesh, t, name = mesh.name) {
+  const p = new Float64Array(mesh.positions.length);
+  for (let i = 0; i < mesh.positions.length; i += 3) {
+    p[i] = mesh.positions[i] + t[0];
+    p[i + 1] = mesh.positions[i + 1] + t[1];
+    p[i + 2] = mesh.positions[i + 2] + t[2];
   }
-  return makeMesh(pos, mesh.indices, mesh.name + '/shift');
+  return makeMesh(p, mesh.indices, name);
 }
 
-/** Direction from witness pa->pb normalized (move B away from A). */
-function witnessDirection(pa, pb) {
-  let dx = pb[0] - pa[0], dy = pb[1] - pa[1], dz = pb[2] - pa[2];
-  const n = Math.hypot(dx, dy, dz);
-  if (n < 1e-300) return [1, 0, 0];
-  return [dx / n, dy / n, dz / n];
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const norm = (v) => Math.hypot(v[0], v[1], v[2]);
+function unit(v) {
+  const n = norm(v);
+  return n > 0 ? [v[0] / n, v[1] / n, v[2] / n] : null;
 }
 
-/** Sound decision: is clearance(A, B shifted by t*u) >= target? */
-function reachesTarget(A, B, ux, uy, uz, t, target, opts, bvhA, bvhB) {
-  const S = translateMesh(B, ux * t, uy * t, uz * t);
-  const r = closestPair(A, S, { ...opts, bvhA, bvhB: buildBvh(S) });
-  return (r.lo !== null && r.lo >= target) ? { lo: r.lo, hi: r.hi } : null;
+/** Witness face normal of triangle `ia` of `mesh`, oriented away from point `from`. */
+export function triangleNormal(mesh, tri, from) {
+  const I = mesh.indices, P = mesh.positions;
+  const a = 3 * I[3 * tri], b = 3 * I[3 * tri + 1], c = 3 * I[3 * tri + 2];
+  const ux = P[b] - P[a], uy = P[b + 1] - P[a + 1], uz = P[b + 2] - P[a + 2];
+  const vx = P[c] - P[a], vy = P[c + 1] - P[a + 1], vz = P[c + 2] - P[a + 2];
+  let n = [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx];
+  n = unit(n);
+  if (!n) return null;
+  const cx = (P[a] + P[b] + P[c]) / 3 - from[0];
+  const cy = (P[a + 1] + P[b + 1] + P[c + 1]) / 3 - from[1];
+  const cz = (P[a + 2] + P[b + 2] + P[c + 2]) / 3 - from[2];
+  return n[0] * cx + n[1] * cy + n[2] * cz >= 0 ? n : [-n[0], -n[1], -n[2]];
+}
+
+/** Candidate escape directions for a degenerate (touching, hi = 0) witness pair. */
+export function escapeDirections(A, B, cert) {
+  const out = [];
+  const push = (d) => {
+    const u = unit(d);
+    if (u && !out.some((e) => e[0] * u[0] + e[1] * u[1] + e[2] * u[2] > 1 - 1e-9)) out.push(u);
+  };
+  const pa = cert.pa, pb = cert.pb;
+  if (pa && pb) push(sub(pb, pa));
+  if (pa && cert.ia !== undefined) {
+    const n = triangleNormal(A, cert.ia, pb ?? pa);
+    if (n) { push(n); push([-n[0], -n[1], -n[2]]); }
+  }
+  if (pb && cert.ib !== undefined) {
+    const n = triangleNormal(B, cert.ib, pa ?? pb);
+    if (n) { push(n); push([-n[0], -n[1], -n[2]]); }
+  }
+  for (const d of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) push(d);
+  return out;
 }
 
 /**
- * Find the minimal t along unit direction u such that the shifted pair reaches
- * the target clearance, via monotone binary search. Returns {t, interval} or
- * null if the target is not reachable within budget.
+ * Repair: translate B so that the certified interval lies at or above `target`.
+ * Returns before/after intervals, the total translation, per-step log, a sound
+ * lower bound on any repair, and `verified` = after.lo >= target.
+ * opts: { tol (interval width), maxPairs, maxSteps = 6, probeScale = 1.001 }
  */
-function minTranslationAlong(A, B, ux, uy, uz, target, opts) {
-  const bvhA = opts.bvhA ?? buildBvh(A);
-  const iters = opts.iters ?? 34;
-  const tMax = (opts.tMax ?? 2 * (A.diag + B.diag)) + 1;
-  // grow an upper bound until reachable (or hit tMax)
-  let hiT = 0;
-  let ok = reachesTarget(A, B, ux, uy, uz, hiT, target, opts, bvhA, null);
-  if (ok) return { t: 0, interval: [ok.lo, ok.hi] };
-  let step = (target || 1e-3);
-  for (let i = 0; i < 80; i++) {
-    hiT += step;
-    if (hiT > tMax) return null;
-    ok = reachesTarget(A, B, ux, uy, uz, hiT, target, opts, bvhA, null);
-    if (ok) break;
-    step *= 2;
-  }
-  if (!ok) return null;
-  // binary search the smallest passing t in [0, hiT]
-  let loT = 0, hiR = hiT;
-  for (let i = 0; i < iters; i++) {
-    const mid = (loT + hiR) / 2;
-    if (reachesTarget(A, B, ux, uy, uz, mid, target, opts, bvhA, null)) hiR = mid;
-    else loT = mid;
-  }
-  const final = reachesTarget(A, B, ux, uy, uz, hiR, target, opts, bvhA, null);
-  return { t: hiR, interval: final ? [final.lo, final.hi] : null };
-}
-
-/**
- * Repairs contact: find the minimal-magnitude translation that raises the
- * clearance of (A,B) to >= target. Directions tried = [witness direction]
- * plus any caller-provided opts.dirs.
- *
- * Returns:
- *   { repairable, translation:[x,y,z], magnitude, direction:[ux,uy,uz],
- *     before:{interval, certified}, repaired:{interval, certified}, target,
- *     bestIndex, iterations }
- */
-export function repairSeparation(A, B, opts = {}) {
+export function repairClearance(A, B, target, opts = {}) {
   const diag = Math.min(A.diag, B.diag) || Math.max(A.diag, B.diag) || 1;
-  const target = opts.target ?? 0.02 * diag;
-  const before = closestPair(A, B, opts);
-  if (before.lo !== null && before.lo >= target) {
-    // already separated as far as the target requires: no repair needed
-    return {
-      repairable: true, alreadyClear: true,
-      translation: [0, 0, 0], magnitude: 0, direction: [1, 0, 0],
-      before: { interval: [before.lo, before.hi], certified: before.certified },
-      repaired: { interval: [before.lo, before.hi], certified: before.certified },
-      target, bestIndex: -1, iterations: 0,
-    };
+  // Interval width: small enough that the one-step overshoot stays a tiny fraction of
+  // the required travel, but never wider than 1e-3 of the target.
+  const tol = opts.tol ?? Math.min(1e-4 * diag, 1e-3 * target);
+  const maxPairs = opts.maxPairs ?? 300000;
+  const maxSteps = opts.maxSteps ?? 4;
+  const goal = target + 2 * tol;      // aim slightly past target so `lo >= target` holds
+  const certOpts = { tol, maxPairs };
+  const before = closestPair(A, B, certOpts);
+  if (!before.certified) {
+    return { target, verdict: 'abstain', reason: 'budget-exhausted-before', verified: false,
+      before: { lo: before.lo, hi: before.hi, certified: false }, after: null,
+      translation: [0, 0, 0], moved: 0, lowerBound: null, gapRatio: null, steps: [], meshB: B };
   }
-  // candidate directions: 6 cardinal axes (robust regardless of witness quality)
-  // plus the exact witness direction (which is the true separating normal for
-  // parallel/contact faces) plus caller-provided extras. We keep the minimal shift.
-  const directs = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
-  if (before.pa && before.pb && before.hi < target) {
-    const w = witnessDirection(before.pa, before.pb);
-    directs.push(w);
-  }
-  if (opts.dirs) for (const d of opts.dirs) directs.push(d);
+  const lowerBound = Math.max(0, target - before.hi);
+  const steps = [];
+  let cur = B, last = before, total = [0, 0, 0];
 
-  let best = null;
-  for (let i = 0; i < directs.length; i++) {
-    const [ux, uy, uz] = directs[i];
-    const r = minTranslationAlong(A, B, ux, uy, uz, target, opts);
-    if (!r) continue;
-    if (!best || r.t < best.t) best = { t: r.t, interval: r.interval, dir: [ux, uy, uz], index: i };
+  for (let k = 0; k < maxSteps; k++) {
+    if (last.lo >= target) break;
+    const need = goal - last.lo;
+    // Direction portfolio. The witness gradient is the natural candidate, but for
+    // non-convex scenery (a ring around a sphere) it is not the cheapest escape, so we
+    // score the candidate set by the certified interval it reaches at the same cost.
+    const cands = escapeDirections(A, cur, last);
+    if (last.hi > 1e-12 * diag) {
+      const u = unit(sub(last.pb, last.pa));
+      if (u) {
+        const j = cands.findIndex((e) => e[0] * u[0] + e[1] * u[1] + e[2] * u[2] > 1 - 1e-9);
+        if (j > 0) cands.splice(j, 1);
+        cands.unshift(u);
+      }
+    }
+    let pick = null;
+    for (const u of cands) {
+      const t = [u[0] * need, u[1] * need, u[2] * need];
+      const probe = closestPair(A, translateMesh(cur, t), certOpts);
+      if (!probe.certified) continue;
+      if (probe.lo >= target) { pick = { dir: u, delta: need, lo: probe.lo, clears: true }; break; }
+      if (!pick || probe.lo > pick.lo) pick = { dir: u, delta: need, lo: probe.lo, clears: false };
+    }
+    if (!pick) {
+      return { target, verdict: 'abstain', reason: 'no-certifiable-direction', verified: false,
+        before: { lo: before.lo, hi: before.hi, certified: true }, after: { lo: last.lo, hi: last.hi, certified: last.certified },
+        translation: total, moved: Math.hypot(...total), lowerBound, gapRatio: null, steps, meshB: cur };
+    }
+    if (!pick.clears && pick.lo <= last.lo) {
+      // no candidate makes progress at this step size: grow the step once, else abstain
+      const big = { dir: pick.dir, delta: need + target };
+      const probe = closestPair(A, translateMesh(cur, big.dir.map((v) => v * big.delta)), certOpts);
+      if (!probe.certified || probe.lo <= last.lo) {
+        return { target, verdict: 'abstain', reason: 'no-progress', verified: false,
+          before: { lo: before.lo, hi: before.hi, certified: true }, after: { lo: last.lo, hi: last.hi, certified: last.certified },
+          translation: total, moved: Math.hypot(...total), lowerBound, gapRatio: null, steps, meshB: cur };
+      }
+      pick = { dir: big.dir, delta: big.delta, lo: probe.lo, clears: probe.lo >= target };
+    }
+    const t = [pick.dir[0] * pick.delta, pick.dir[1] * pick.delta, pick.dir[2] * pick.delta];
+    const next = translateMesh(cur, t);
+    const after = closestPair(A, next, certOpts);
+    steps.push({ step: k + 1, dir: pick.dir, delta: pick.delta, lo_before: last.lo, hi_before: last.hi,
+      lo_after: after.lo, hi_after: after.hi, certifiedAfter: after.certified });
+    total = [total[0] + t[0], total[1] + t[1], total[2] + t[2]];
+    cur = next; last = after;
+    if (!after.certified) {
+      return { target, verdict: 'abstain', reason: 'budget-exhausted-after', verified: false,
+        before: { lo: before.lo, hi: before.hi, certified: true }, after: { lo: after.lo, hi: after.hi, certified: false },
+        translation: total, moved: Math.hypot(...total), lowerBound, gapRatio: null, steps, meshB: cur };
+    }
   }
-  if (!best) {
-    return {
-      repairable: false,
-      translation: null, magnitude: null, direction: null,
-      before: { interval: [before.lo, before.hi], certified: before.certified },
-      repaired: null, target, bestIndex: -1,
-    };
-  }
+
+  const moved = Math.hypot(total[0], total[1], total[2]);
+  const verified = last.lo !== null && last.lo >= target;
   return {
-    repairable: true, alreadyClear: false,
-    translation: [best.dir[0] * best.t, best.dir[1] * best.t, best.dir[2] * best.t],
-    magnitude: best.t,
-    direction: best.dir,
-    before: { interval: [before.lo, before.hi], certified: before.certified },
-    repaired: { interval: best.interval, certified: best.interval !== null },
-    target, bestIndex: best.index, iterations: directs.length,
+    target, verdict: verified ? 'repaired-certified' : 'not-separated',
+    reason: verified ? 'interval-closed' : 'max-steps-reached',
+    before: { lo: before.lo, hi: before.hi, certified: before.certified, pa: before.pa, pb: before.pb },
+    after: { lo: last.lo, hi: last.hi, certified: last.certified },
+    translation: total, moved, lowerBound,
+    gapRatio: lowerBound > 0 ? moved / lowerBound : null,
+    optimalityGap: lowerBound > 0 ? moved / lowerBound - 1 : null,
+    verified, steps, meshB: cur,
   };
 }

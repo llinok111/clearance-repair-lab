@@ -3,14 +3,11 @@ vendor/
 __pycache__/
 *.pyc
 .venv/
-.env
 *.zip
+*.tar
 *.tar.gz
 *.tgz
 *.7z
-*.DS_Store
-*.glb
-/state/
-proven_core.mjs
-tmp/
+.DS_Store
+
 .model-patch.yml

@@ -1,49 +1,52 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>clearance-repair · certificate-driven minimal separation</title>
+<title>clearance-repair-lab — certificate-driven minimal separation</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; font-family: ui-monospace, monospace; }
-  #app { display: flex; height: 100%; width: 100%; }
-  #three { flex: 1; height: 100%; }
-  #panel { width: 340px; background: #0f1520; color: #cfe3ff; padding: 14px; overflow-y: auto; font-size: 12px; line-height: 1.5; }
-  #panel h1 { font-size: 15px; margin: 0 0 4px; color: #8fd0ff; }
-  #panel h2 { font-size: 12px; margin: 12px 0 4px; color: #7be; }
-  .btn { background: #1d3; color: #063; border: 0; padding: 8px 12px; font-weight: 700; cursor: pointer; border-radius: 6px; }
-  .btn.gray { background: #355; color: #cfc; }
-  .num { color: #ffd479; }
-  .mono { color: #8ff; }
-  .ok { color: #4f4; } .no { color: #f66; }
-  input[type=range] { width: 100%; }
-  #status { white-space: pre-wrap; margin-top: 8px; border-top: 1px solid #234; padding-top: 8px; }
+  :root { color-scheme: dark; }
+  body { margin: 0; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background: #0d1117; color: #c9d1d9; }
+  #app { display: grid; grid-template-columns: 340px 1fr; height: 100vh; }
+  aside { padding: 16px; overflow-y: auto; border-right: 1px solid #30363d; }
+  h1 { font-size: 15px; margin: 0 0 8px; color: #58a6ff; }
+  p.lead { color: #8b949e; margin: 0 0 14px; }
+  label { display: block; margin: 10px 0 4px; color: #8b949e; }
+  select, input[type=range], button { width: 100%; font: inherit; }
+  select, button { background: #161b22; color: #c9d1d9; border: 1px solid #30363d; border-radius: 4px; padding: 6px; }
+  button { cursor: pointer; margin-top: 12px; background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.ghost { background: #161b22; border-color: #30363d; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  td, th { text-align: left; padding: 3px 4px; border-bottom: 1px solid #21262d; }
+  .ok { color: #3fb950; } .bad { color: #f85149; } .dim { color: #8b949e; }
+  #canvas { width: 100%; height: 100%; display: block; }
+  #hud { position: absolute; top: 12px; right: 12px; background: #161b22cc; border: 1px solid #30363d;
+         border-radius: 6px; padding: 10px 12px; min-width: 260px; }
+  #hud b { color: #58a6ff; }
 </style>
 <script type="importmap">
-{
-  "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
-    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
-  }
-}
+{ "imports": {
+    "three": "https://unpkg.com/three@0.169.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.169.0/examples/jsm/"
+} }
 </script>
 </head>
 <body>
 <div id="app">
-  <div id="three"></div>
-  <div id="panel">
-    <h1>clearance-repair</h1>
-    <div>证书驱动的<b>最小分离修复</b>：给定相互接触/穿透的两份网格，求使间隙达到目标的最小平移，并给出修复前后的双证书。</div>
-    <h2>参数</h2>
-    <label>目标间隙 scale×minDiag</label>
-    <input type="range" id="targetScale" min="0.01" max="0.15" step="0.005" value="0.05" />
-    <div>target = <span class="num" id="targetVal">0.05</span> × minDiag</div>
-    <h2>示例</h2>
-    <button class="btn" id="pair0">接触对 P0</button>
-    <button class="btn gray" id="pair3">斜切对 P3</button>
-    <button class="btn gray" id="pair4">任意法向 P4</button>
-    <h2>结果<br />(浏览器用与 node 完全相同的 <span class="mono">src/core.mjs</span> 现场复算)</h2>
-    <div id="status">点击示例开始。</div>
+  <aside>
+    <h1>clearance-repair-lab</h1>
+    <p class="lead">Sound interval certificate → minimum-norm separation repair → certificate again. The numbers below are recomputed in your browser with the same <code>src/core.mjs</code> that <code>bench/verify.mjs</code> runs in node, then compared with <code>data/reference.json</code> baked by node.</p>
+    <label for="case">Contact scene</label>
+    <select id="case"></select>
+    <label for="target">Required clearance <span id="tv"></span></label>
+    <input id="target" type="range" min="1" max="120" step="1" />
+    <button id="repair">Repair (certify → move → certify)</button>
+    <button id="reset" class="ghost">Reset to original pose</button>
+    <table id="tbl"></table>
+  </aside>
+  <div style="position:relative">
+    <canvas id="canvas"></canvas>
+    <div id="hud"></div>
   </div>
 </div>
 <script type="module" src="./main.js"></script>
