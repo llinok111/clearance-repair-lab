@@ -60,27 +60,27 @@ Timing (`bench/result.json`, warmup 1 + 7 timed reps per case, cold start separa
 
 | case | median | RSD |
 | --- | --- | --- |
-| box-on-box | 0.34 ms | 28.2% |
-| sphere-on-box | 0.98 ms | 11.1% |
-| cylinder-on-plate | 0.36 ms | 4.6% |
-| tetra-over-box | 0.31 ms | 17.9% |
-| torus-over-sphere | **410.49 ms** | 1.8% |
-| sphere-sphere-eps | 2.12 ms | 2.5% |
+| box-on-box | 0.34 ms | 3.2% |
+| sphere-on-box | 0.98 ms | 14.5% |
+| cylinder-on-plate | 0.36 ms | 2.6% |
+| tetra-over-box | 0.31 ms | 18.2% |
+| torus-over-sphere | **416.91 ms** | 1.4% |
+| sphere-sphere-eps | 2.14 ms | 7.7% |
 
-Pooled median **0.96 ms**, p95 **411.88 ms**, pooled RSD **220.9%** — the distribution is deliberately
+Pooled median **0.964 ms**, p95 **420.39 ms**, pooled RSD **220.9%** — the distribution is deliberately
 bimodal (five sub-millisecond scenes plus one 410 ms scene), so the pooled RSD is not a stability claim;
-per-case RSD is the meaningful number. Cold start (torus) **401.4 ms**.
+per-case RSD is the meaningful number. Cold start (torus) **406.4 ms**.
 The torus cost is the direction portfolio: ~15 certificates × ~16 ms per probe on a 64,512-pair mesh pair.
-The naive planner takes **348.6 ms** on the same scene and still does not separate it.
+The naive planner takes **351.8 ms** on the same scene and still does not separate it.
 
 Baseline (`baseline/naive.mjs`: exact O(n²) distance + one step along the exact witness direction):
 
 | scene | naive verdict | naive moved | time |
 | --- | --- | --- | --- |
-| box-on-box / sphere-on-box / cylinder-on-plate | `no-direction` | 0 | 0.4 / 5.8 / 2.0 ms |
+| box-on-box / sphere-on-box / cylinder-on-plate | `no-direction` | 0 | 0.3 / 5.7 / 1.9 ms |
 | tetra-over-box | `not-separated` | 0.08000 | 0.3 ms |
-| torus-over-sphere | `not-separated` | 0.01240 | 348.6 ms |
-| sphere-sphere-eps | `repaired` | 0.05990 | **157.9 ms** vs **2.12 ms** certified (**74.5×**) |
+| torus-over-sphere | `not-separated` | 0.01240 | 351.8 ms |
+| sphere-sphere-eps | `repaired` | 0.05990 | **155.7 ms** vs **2.14 ms** certified (**72.8×**) |
 
 ## 本轮创新
 
